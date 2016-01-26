@@ -18,6 +18,7 @@
     "purescript-canvas": "^0.3.4",
     "purescript-drawing": "^0.3.7",
     "purescript-smolder": "^3.0.1",
-    "purescript-flare": "^0.4.2"
+    "purescript-flare": "^0.4.2",
+    "purescript-affjax": "^0.10.1"
   }
 }

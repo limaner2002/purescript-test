@@ -1,10 +1,14 @@
 module Test.Main where
 
+import Test.Data
+
 import Prelude
 import Data.Array
 import Data.Maybe
 import Data.Foldable
 import Data.Monoid
+import Data.JSON
+import Data.Either
 
 import Control.Monad.Aff
 import qualified Network.HTTP.Affjax as AJ
@@ -66,33 +70,14 @@ light on = H.with H.div arg mempty
 
 ui2 = light <$> liftSF (since 3000.0) (button "Switch on" unit unit)
 
-getPlaying :: forall e. (String -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit) -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit
-getPlaying f = do
-  -- launchAff $ do
+getStatus :: forall e. (Either String VMStatus -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit) -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit
+getStatus f = do             
   runAff (\error -> log $ message error)
-         (\result -> f result.response)
-         (AJ.get "http://websiteservices.musicchoice.com/api/channels/NowPlaying/ttla/44")
-
-      --result <- (AJ.get "http://websiteservices.musicchoice.com/api/channels/NowPlaying/ttla/44")
-      --liftEff $ log result.response
-      --liftEff $ f result.response
-
--- mcSignal :: forall e. Eff (chan :: Chan, err :: EXCEPTION, ajax :: AJ.AJAX | e) (Channel String)
--- mcSignal = do
---   chan <- channel "Updating..."
---   liftEff $ getPlaying $ send chan
---   return chan
-
--- test :: forall e . Eff (chan :: Chan, err :: EXCEPTION, ajax :: AJ.AJAX, console :: CONSOLE | e) Unit
--- test = do
---   sig <- mcSignal
---   sig ~> log
+         (\result -> f $ eitherDecode result.response)
+         (AJ.get "http://10.203.50.241:3000/vmStatus")
 
 hello :: forall e. Eff (console :: CONSOLE | e) (Signal String)
 hello = return $ constant "Hello World!"
-
--- test :: forall e. Signal (Eff (console :: CONSOLE | e) Unit)
--- test = undefined
 
 nowPlaying :: String -> H.MarkupM Unit
 nowPlaying trackInfo = H.div arg
@@ -103,22 +88,18 @@ newChan :: forall e. Eff (ajax :: AJ.AJAX, err :: EXCEPTION, chan :: Chan | e) (
 newChan = channel "Updating..."
 
 test = do
-  chan <- channel "Updating..."
-  -- mChan <- mcSignal
-  -- getPlaying $ send chan
+  chan <- channel $ Right Updating
+  getStatus $ send chan
   
-  runAff (\error -> log $ message error)
-         (\result -> send chan result.response)
-         (AJ.get "http://websiteservices.musicchoice.com/api/channels/NowPlaying/ttla/44")
+  return chan
 
-  runSignal $ do
-         let sig = delay 10000.0 (subscribe chan)
-         sig ~> log
+status :: Either String VMStatus -> H.MarkupM Unit
+status (Right status) = H.div arg
+    where
+      arg = H.text $ show status
+status (Left msg) = H.div $ H.text msg
 
+ui3 = status <$> lift (subscribe <$> test)
 
---appTest = 
--- ui3 = nowPlaying <$> 
-
--- main = do
---   runFlareDrawing "controls1" "output1" ui1
---   runFlareHTML "controls2" "output2" ui2
+main = do
+  runFlareHTML "controls3" "output3" ui3
