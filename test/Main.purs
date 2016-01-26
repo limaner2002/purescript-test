@@ -18,6 +18,7 @@ import Control.Monad.Eff
 import Control.Monad.Eff.Class
 import Control.Monad.Eff.Console hiding (error)
 import Control.Monad.Eff.Exception
+import DOM.Timer hiding (delay)
 
 --import Signal.DOM
 import Signal.Time
@@ -70,11 +71,29 @@ light on = H.with H.div arg mempty
 
 ui2 = light <$> liftSF (since 3000.0) (button "Switch on" unit unit)
 
-getStatus :: forall e. (Either String VMStatus -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit) -> Eff (ajax :: AJ.AJAX, chan :: Chan, console :: CONSOLE | e) Unit
-getStatus f = do             
-  runAff (\error -> log $ message error)
-         (\result -> f $ eitherDecode result.response)
-         (AJ.get "http://10.203.50.241:3000/vmStatus")
+getStatus :: forall e. String
+          -> (Either String VMStatus -> Eff ( ajax :: AJ.AJAX
+                                            , chan :: Chan
+                                            , console :: CONSOLE
+                                            , timer :: Timer | e) Unit)
+          -> Eff ( ajax :: AJ.AJAX
+                 , chan :: Chan
+                 , console :: CONSOLE
+                 , timer :: Timer | e) Unit
+getStatus url f = go
+    where
+      go =
+          runAff (\error -> log $ message error)
+                 (\result -> do
+                    f $ eitherDecode result.response
+                    t <- timeout 30000 go
+                    log $ "Looping"
+                 )
+                 (do
+                   liftEff $ f $ Right Updating
+                   AJ.get url
+                 )
+
 
 hello :: forall e. Eff (console :: CONSOLE | e) (Signal String)
 hello = return $ constant "Hello World!"
@@ -89,7 +108,7 @@ newChan = channel "Updating..."
 
 test = do
   chan <- channel $ Right Updating
-  getStatus $ send chan
+  getStatus "http://10.203.50.241:3000/vmStatus" $ send chan
   
   return chan
 
