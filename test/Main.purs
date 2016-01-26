@@ -6,6 +6,7 @@ import Prelude
 import Data.Array
 import Data.Maybe
 import Data.Foldable
+import Data.Traversable
 import Data.Monoid
 import Data.JSON
 import Data.Either
@@ -106,19 +107,60 @@ nowPlaying trackInfo = H.div arg
 newChan :: forall e. Eff (ajax :: AJ.AJAX, err :: EXCEPTION, chan :: Chan | e) (Channel String)
 newChan = channel "Updating..."
 
-test = do
+test url = do
   chan <- channel $ Right Updating
-  getStatus "http://10.203.50.241:3000/vmStatus" $ send chan
+  getStatus url $ send chan
   
   return chan
 
 status :: Either String VMStatus -> H.MarkupM Unit
-status (Right status) = H.div arg
+status (Right status) = markIssue (maxIssue status) (H.li $ H.text $ arg status)
     where
-      arg = H.text $ show status
-status (Left msg) = H.div $ H.text msg
+      arg (VMStatus o) = o.name
+      arg Updating = "Updating..."
+      markIssue (Just Okay) markup = H.with markup (A.className "list-group-item")
+      markIssue (Just (Warn _)) markup = H.with markup (A.className "list-group-item list-group-item-warning")
+      markIssue (Just (Fatal _)) markup = H.with markup (A.className "list-group-item list-group-item-danger")
+      markIssue Nothing _ = H.with (H.li $ H.text "No engines found?") (A.className "list-group-item list-group-item-danger")
+status (Left msg) = H.li $ H.text msg
 
-ui3 = status <$> lift (subscribe <$> test)
+statuses :: Array (Either String VMStatus) -> H.MarkupM Unit
+statuses stats = vmStats
+    where
+      table = H.with tableStatus (A.className "list-group")
+      tableStatus = H.ul $ H.tbody $ foldMap status stats
+      vmStats = H.with (H.div table) (A.className "col-xs-2")
+
+vms :: Array String
+vms = [ "http://10.203.50.241:3000/vmStatus"
+      , "http://10.203.50.239:3000/vmStatus"
+      , "http://appiansandbox.persistent.com:3000/vmStatus"
+      , "http://10.203.50.211:3000/vmStatus"
+      , "http://10.203.51.109:3000/vmStatus"
+      , "http://appianworks.persistent.com:3000/vmStatus"
+      , "http://usappiandev1.persistent.co.in:3000"
+      , "http://usappiandev2.persistent.co.in:3000"
+      , "http://appian-demo.persistent.co.in:3000"
+      , "http://appian-prod-demo.persistent.co.in:3000"
+      ]
+
+signals = map test vms
+
+maxIssue :: VMStatus -> Maybe EngineStatus
+maxIssue (VMStatus o) = maxEngine o.appian
+    where
+      maxEngine (AppianEngines engines) = maximum $ statuses engines
+      maxEngine NoLicense = Just $ Fatal "License has expired!"
+      statuses engines = map getStatus engines
+      getStatus (Engine _ _ status) = status
+maxIssue Updating = Just Okay
+
+-- ui3 = statuses <$> lift (subscribe <$> signals)
+g = map subscribe <$> signals
+h = lift <$> g
+
+--ui3 = status <$> lift (subscribe <$> test "http://10.203.50.241:3000/vmStatus")
+ui3 = statuses <$> sequence h
 
 main = do
   runFlareHTML "controls3" "output3" ui3

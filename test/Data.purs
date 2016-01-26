@@ -48,6 +48,21 @@ data EngineStatus
     | Warn String
     | Fatal String
 
+instance engineStatusOrd :: Ord EngineStatus where
+    compare Okay Okay = EQ
+    compare Okay _ = LT
+    compare _ Okay = GT
+    compare (Warn _) (Warn _) = EQ
+    compare (Warn _) _ = LT
+    compare _ (Warn _) = LT
+    compare (Fatal _) (Fatal _) = EQ
+
+instance engineStatusEq :: Eq EngineStatus where
+    eq Okay Okay = true
+    eq (Warn _) (Warn _) = true
+    eq (Fatal _) (Fatal _) = true
+    eq _ _ = false
+
 instance engineStatusShow :: Show EngineStatus where
     show Okay = "Okay"
     show (Warn msg) = "Warning: " ++ msg
