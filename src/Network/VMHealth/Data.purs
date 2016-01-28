@@ -102,7 +102,7 @@ markIssue (Just (Warn _)) = "fa-exclamation-triangle text-warning"
 markIssue (Just (Fatal _)) = "fa-exclamation-circle text-danger"
 
 showVMDetails :: Either String VMStatus -> Int -> H.Markup
-showVMDetails eStat idx = H.with (H.div (getDetails eStat)) (A.className "tab-pane" <> A.id ("vm" <> show idx))
+showVMDetails eStat idx = H.with (H.div (getDetails eStat)) (A.className "tab-pane"<> A.id ("vm" <> show idx))
     where
       getDetails (Right status) = toMarkup (status ^. _engines)
       getDetails (Right Updating) = toMarkup "Updating..."
