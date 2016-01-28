@@ -20,6 +20,7 @@
     "purescript-smolder": "^3.0.1",
     "purescript-flare": "^0.4.2",
     "purescript-affjax": "^0.10.1",
-    "purescript-timers": "^1.0.0"
+    "purescript-timers": "^1.0.0",
+    "purescript-lens": "^0.9.1"
   }
 }

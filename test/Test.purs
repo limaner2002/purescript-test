@@ -5,6 +5,7 @@ import Network.VMHealth
 import Data.Array
 import Data.JSON
 import Data.Either
+import Data.Maybe
 import Prelude (map)
 
 testStatus :: Array (Either String VMStatus)
@@ -23,3 +24,8 @@ getValue (Right val) = val
 
 getMessage :: forall a. Either String a -> String
 getMessage (Left msg) = msg
+
+getFirstStatus :: Array (Either String VMStatus) -> VMStatus
+getFirstStatus statuses = get (statuses !! 1)
+    where
+      get (Just (Right st)) = st

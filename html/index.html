@@ -6,13 +6,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>purescript-flare</title>
     <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" rel="stylesheet">
+    <link href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.4.0/css/font-awesome.min.css" rel="stylesheet">
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"></script>
+    <script src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"></script>
+    <style>
+      .glyphicon-none:before{
+          content: "\2122";
+          color: transparent !important;
+      }
+    </style>
   </head>
   <body>
-    <div class="container">
-      <h3>VM Stats</h3>
-      <div id="controls3"></div>
-      <div id="output3"></div>
-      <script type="text/javascript" src="main.js"></script>
-    </div>
+    <div id="controls3"></div>
+    <div id="output3"></div>
+    <script type="text/javascript" src="main.js"></script>
   </body>
 </html>

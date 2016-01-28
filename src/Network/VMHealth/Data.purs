@@ -5,11 +5,13 @@ import Data.JSON
 import Data.Array
 import Data.Foldable
 import Data.Monoid
+import Data.Either
+import Data.Maybe
+import Optic.Core hiding ((..))
 
 import qualified Text.Smolder.HTML as H
 import qualified Text.Smolder.Markup as H
 import qualified Text.Smolder.HTML.Attributes as A
-
 
 role = H.attribute "role"
 dataToggle = H.attribute "data-toggle"
@@ -21,6 +23,10 @@ class ToMarkup a where
 instance stringToMarkup :: ToMarkup String where
     toMarkup str = H.text str
 
+instance maybeToMarkup :: (ToMarkup a) => ToMarkup (Maybe a) where
+    toMarkup (Just val) = toMarkup val
+    toMarkup Nothing = mempty
+
 -- instance arrayToMarkup :: ToMarkup Array where
 --     toMarkup arr = foldMap toMarkup arr
 
@@ -30,6 +36,15 @@ data VMStatus
       , name :: String
       }
     | Updating
+
+_engines :: LensP VMStatus (Maybe AppianEngines)
+_engines = lens getEngines setEngines
+ where
+   getEngines (VMStatus status) = Just status.appian
+   getEngines Updating = Nothing
+   setEngines (VMStatus status) (Just newEngines) = VMStatus (status {appian = newEngines})
+   setEngines (VMStatus status) Nothing = VMStatus status
+   -- setEngines Updating _ = fail "No engines to update!"
 
 instance showVMStatus :: Show VMStatus where
     show (VMStatus { appian = app, name = vmName }) =
@@ -43,17 +58,55 @@ instance vmStatusFromJSON :: FromJSON VMStatus where
       return $ VMStatus {appian: engines, name: vmName}
     parseJSON _ = fail "VMStatus parse failed"
 
-instance vmStatusToMarkup :: ToMarkup VMStatus where
-    toMarkup (VMStatus { appian = appEngines, name = vmName}) =
+createPanel :: Either String VMStatus -> Int -> H.Markup
+createPanel (Right status) idx =
         H.with (H.div panel) (A.className "panel panel-default")
       where
-        panel = heading <> body
+        panel = heading <> panelCollapse
         heading = H.with (H.div title) (A.className "panel-heading" <> role "tab" <> A.id "heading")
         title = H.with (H.h4 button) (A.className "panel-title")
-        button = H.with (H.a $ toMarkup vmName) (role "button" <> dataToggle "collapse" <> dataParent "#accordion" <> A.href "#collapseOne")
-        panelCollapse = H.with (H.div body) (A.id "collapse" <> A.className "panel-collapse collapse in" <> role "tabpanel")
-        body = H.with (H.div $ toMarkup appEngines) (A.className "panel-body")
-    toMarkup Updating = H.text "Updating..."
+        button = H.with (H.a $ getName status) (role "button" <> dataToggle "collapse" <> dataParent "#accordion" <> A.href ("#collapse" <> show idx))
+        panelCollapse = H.with (H.div body) (A.id ("collapse" <> show idx) <> A.className "panel-collapse collapse" <> role "tabpanel")
+        body = H.with (H.div $ getDetails status) (A.className "panel-body")
+        getName (VMStatus o) = toMarkup o.name
+        getName Updating = toMarkup "Updating..."
+        getDetails (VMStatus o) = toMarkup o.appian
+        getDetails Updating = toMarkup "Updating..."
+createPanel (Left msg) _ = toMarkup msg
+
+createPill :: Either String VMStatus -> Int -> H.Markup
+createPill eStat idx =
+    H.with (H.li (H.with (H.a $ pillLabel eStat) (A.href ("#vm" <> show idx) <> dataToggle "tab"))) isActive
+  where
+    isActive :: H.Attribute
+    isActive =
+        if idx == 1
+        then A.className "active"
+        else mempty
+    pillLabel (Right (VMStatus o)) = displayName o.name (maxIssue o.appian)
+    pillLabel (Right Updating) = displayName "Updating..." $ Just Okay
+    pillLabel (Left msg) = displayName "ERROR!" (Just $ Fatal msg)
+
+displayName name issue = H.with (H.i $ H.text mempty) (A.className ("fa " <> markIssue issue))
+                <> H.span (toMarkup $ " " ++ name)
+
+maxIssue :: AppianEngines -> Maybe EngineStatus
+maxIssue (AppianEngines engines) = maximum $ statuses engines
+    where
+      statuses engines = map getStatus engines
+      getStatus (Engine _ _ status) = status
+maxIssue NoLicense = Just $ Fatal "No license or license expired"
+
+markIssue (Just Okay) = "glyphicon-none"
+markIssue (Just (Warn _)) = "fa-exclamation-triangle text-warning"
+markIssue (Just (Fatal _)) = "fa-exclamation-circle text-danger"
+
+showVMDetails :: Either String VMStatus -> Int -> H.Markup
+showVMDetails eStat idx = H.with (H.div (getDetails eStat)) (A.className "tab-pane" <> A.id ("vm" <> show idx))
+    where
+      getDetails (Right status) = toMarkup (status ^. _engines)
+      getDetails (Right Updating) = toMarkup "Updating..."
+      getDetails (Left msg) = toMarkup msg
 
 data AppianEngines
     = AppianEngines (Array Engine)

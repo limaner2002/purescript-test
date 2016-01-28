@@ -87,7 +87,7 @@ getStatus url f = go
           runAff (\error -> log $ message error)
                  (\result -> do
                     f $ eitherDecode result.response
-                    t <- timeout 30000 go
+                    t <- timeout 300000 go
                     log $ "Looping"
                  )
                  (do
@@ -113,33 +113,57 @@ test url = do
   
   return chan
 
-status :: Either String VMStatus -> H.MarkupM Unit
-status (Right status) = markIssue (maxIssue status) (H.li $ H.text $ arg status)
-    where
-      arg (VMStatus o) = o.name
-      arg Updating = "Updating..."
-      markIssue (Just Okay) markup = H.with markup (A.className "list-group-item")
-      markIssue (Just (Warn _)) markup = H.with markup (A.className "list-group-item list-group-item-warning")
-      markIssue (Just (Fatal _)) markup = H.with markup (A.className "list-group-item list-group-item-danger")
-      markIssue Nothing _ = H.with (H.li $ H.text "No engines found?") (A.className "list-group-item list-group-item-danger")
-status (Left msg) = H.li $ H.text msg
+-- status :: Either String VMStatus -> H.MarkupM Unit
+-- status (Right status) = markIssue (maxIssue status) (H.li $ H.text $ arg status)
+--     where
+--       arg (VMStatus o) = o.name
+--       arg Updating = "Updating..."
+--       markIssue (Just Okay) markup = H.with markup (A.className "list-group-item")
+--       markIssue (Just (Warn _)) markup = H.with markup (A.className "list-group-item list-group-item-warning")
+--       markIssue (Just (Fatal _)) markup = H.with markup (A.className "list-group-item list-group-item-danger")
+--       markIssue Nothing _ = H.with (H.li $ H.text "No engines found?") (A.className "list-group-item list-group-item-danger")
+-- status (Left msg) = H.li $ H.text msg
 
-statuses :: Array (Either String VMStatus) -> H.MarkupM Unit
-statuses stats = vmStats
-    where
-      table = H.with tableStatus (A.className "list-group")
-      tableStatus = H.ul $ H.tbody $ foldMap status stats
-      vmStats = H.with (H.div table) (A.className "col-xs-2")
+-- statuses :: Array (Either String VMStatus) -> H.MarkupM Unit
+-- statuses stats = vmStats
+--     where
+--       table = H.with tableStatus (A.className "list-group")
+--       tableStatus = H.ul $ H.tbody $ foldMap status stats
+--       vmStats = H.with (H.div table) (A.className "col-xs-2")
+
+-- Data type for accumulating the generated markup for the accordion
+data ComponentAccum = ComponentAccum H.Markup Int
+
+buildComponent :: (Either String VMStatus -> Int -> H.Markup)
+               -> Array (Either String VMStatus)
+               -> H.MarkupM Unit
+buildComponent createComponent eStats =
+    getComponent componentAccum
+  where
+    accumComponent (ComponentAccum components oldIdx) stat = ComponentAccum
+                                                             (components <> createComponent stat (oldIdx)) (oldIdx + 1)
+    componentAccum = foldl accumComponent (ComponentAccum mempty 1) eStats
+    getComponent (ComponentAccum componentMarkup _) = componentMarkup
 
 accordion :: Array (Either String VMStatus) -> H.MarkupM Unit
-accordion eStats = foldMap createPanel eStats
+accordion eStats = getPanelMarkup panelAccum
     where
-      createPanel (Left msg) = H.text msg
-      createPanel (Right status) = toMarkup status
+      accumPanel (ComponentAccum panels oldIdx) stat = ComponentAccum (panels <> createPanel stat (oldIdx + 1)) (oldIdx + 1)
+      panelAccum = foldl accumPanel (ComponentAccum mempty 1) eStats
+      getPanelMarkup (ComponentAccum panelMarkup _) = panelMarkup
+      -- createPanel (Left msg) = H.text msg
+      -- createPanel (Right status) = toMarkup status
 
-markIssue (Just Okay) = "default"
-markIssue (Just (Warn _)) = "warning"
-markIssue (Just (Fatal _)) = "danger"
+verticalNav :: Array (Either String VMStatus) -> H.MarkupM Unit
+verticalNav eStats = H.with (H.div (navContainer <> vmDetailsContainer)) (A.className "row")
+    where
+      pills = buildComponent createPill eStats
+      nav = H.with (H.ul pills) (A.className "nav nav-pills nav-stacked")
+      navContainer = H.with (H.div nav) (A.className "col-xs-3")
+      vmDetailsContainer = H.with (H.div vmDetails) (A.className "col-xs-9")
+      vmDetails = H.with (H.div detlTables) (A.className "tab-content")
+      -- detlTables = foldMap (\eStat -> H.with (H.div $ showVMDetails eStat) (A.className "tab-pane")) eStats
+      detlTables = buildComponent showVMDetails eStats
 
 vms :: Array String
 vms = [ "http://10.203.50.241:3000/vmStatus"
@@ -156,16 +180,7 @@ vms = [ "http://10.203.50.241:3000/vmStatus"
 
 signals = map test vms
 
-maxIssue :: VMStatus -> Maybe EngineStatus
-maxIssue (VMStatus o) = maxEngine o.appian
-    where
-      maxEngine (AppianEngines engines) = maximum $ statuses engines
-      maxEngine NoLicense = Just $ Fatal "License has expired!"
-      statuses engines = map getStatus engines
-      getStatus (Engine _ _ status) = status
-maxIssue Updating = Just Okay
-
 g = map subscribe <$> signals
 h = lift <$> g
 
-ui3 = accordion <$> sequence h
+ui3 = verticalNav <$> sequence h
